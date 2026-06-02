@@ -43,6 +43,8 @@ import (
 )
 
 // Proxy defines how to handle work connections for different proxy type.
+// 客户端侧 Proxy 负责“把 frps 分配来的工作连接转发到本地服务或本地插件”。
+// 创建位置：client/proxy/proxy_wrapper.go:NewWrapper() 调用 NewProxy()。
 type Proxy interface {
 	Run() error
 
@@ -53,6 +55,8 @@ type Proxy interface {
 }
 
 func NewProxy(ctx context.Context, pxyConf config.ProxyConf, clientCfg config.ClientCommonConf, serverUDPPort int) (pxy Proxy) {
+	// 根据 pkg/config/proxy.go 中的具体 ProxyConf 类型创建客户端代理实现。
+	// 服务端也有同名工厂：server/proxy/proxy.go:NewProxy()，但服务端侧负责监听公网端口/域名。
 	var limiter *rate.Limiter
 	limitBytes := pxyConf.GetBaseInfo().BandwidthLimit.Bytes()
 	if limitBytes > 0 {
@@ -148,6 +152,9 @@ func (pxy *TCPProxy) Close() {
 }
 
 func (pxy *TCPProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
+	// 调用路径：client/control.go:HandleReqWorkConn() -> client/proxy/proxy_manager.go:HandleWorkConn()
+	// -> client/proxy/proxy_wrapper.go:InWorkConn() -> 当前方法。
+	// TCP/HTTP/HTTPS/STCP 等最终都会通过 HandleTCPWorkConnection() 连接本地服务。
 	HandleTCPWorkConnection(pxy.ctx, &pxy.cfg.LocalSvrConf, pxy.proxyPlugin, pxy.cfg.GetBaseInfo(), pxy.limiter,
 		conn, []byte(pxy.clientCfg.Token), m)
 }
@@ -448,6 +455,8 @@ type UDPProxy struct {
 }
 
 func (pxy *UDPProxy) Run() (err error) {
+	// 调用位置：client/proxy/proxy_wrapper.go:SetRunningStatus()。
+	// UDP 客户端代理先解析本地 UDP 服务地址，真正的数据收发在 InWorkConn() 中通过工作连接进行。
 	pxy.localAddr, err = net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", pxy.cfg.LocalIP, pxy.cfg.LocalPort))
 	if err != nil {
 		return
@@ -720,6 +729,9 @@ func (pxy *SUDPProxy) InWorkConn(conn net.Conn, m *msg.StartWorkConn) {
 // Common handler for tcp work connections.
 func HandleTCPWorkConnection(ctx context.Context, localInfo *config.LocalSvrConf, proxyPlugin plugin.Plugin,
 	baseInfo *config.BaseProxyConf, limiter *rate.Limiter, workConn net.Conn, encKey []byte, m *msg.StartWorkConn) {
+	// 调用位置：本文件 TCPProxy/HTTPProxy/HTTPSProxy/STCPProxy/TCPMuxProxy 的 InWorkConn()。
+	// 作用：把工作连接 workConn 与本地服务连接 localConn 双向拷贝，实现真正的数据转发。
+	// 对应服务端入口：server/proxy/proxy.go:HandleUserTCPConnection()。
 	xl := xlog.FromContextSafe(ctx)
 	var (
 		remote io.ReadWriteCloser

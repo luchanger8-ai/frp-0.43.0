@@ -1,4 +1,7 @@
 import Vue from 'vue'
+// frps Dashboard UI 入口文件。
+// 后端静态资源挂载位置：server/dashboard.go:RunDashboardServer()。
+// 页面 API 来源：server/dashboard_api.go，例如 /api/serverinfo、/api/proxy/:type、/api/traffic/:name。
 //import ElementUI from 'element-ui'
 import {
     Button,

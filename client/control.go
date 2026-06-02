@@ -116,26 +116,34 @@ func NewControl(ctx context.Context, runID string, conn net.Conn, session *fmux.
 		ctx:                ctx,
 		authSetter:         authSetter,
 	}
+	// 代理管理器负责把本地代理配置转换为 NewProxy/CloseProxy 消息。
+	// 具体实现见 client/proxy/proxy_manager.go:NewManager()。
 	ctl.pm = proxy.NewManager(ctl.ctx, ctl.sendCh, clientCfg, serverUDPPort)
 
+	// visitor 用于 stcp/xtcp/sudp 等私密访问模式，配置加载见 client/visitor_manager.go:Reload()。
 	ctl.vm = NewVisitorManager(ctl.ctx, ctl)
 	ctl.vm.Reload(visitorCfgs)
 	return ctl
 }
 
 func (ctl *Control) Run() {
+	// worker 启动 reader/writer/msgHandler 三个协程，负责控制连接上的消息收发。
 	go ctl.worker()
 
 	// start all proxies
+	// 代理配置由 client/proxy/proxy_manager.go:Reload() 转换为 Wrapper，并触发 NewProxy 注册。
 	ctl.pm.Reload(ctl.pxyCfgs)
 
 	// start all visitors
+	// visitor 配置由 client/visitor_manager.go:Run() 监听本地访问请求。
 	go ctl.vm.Run()
 	return
 }
 
 func (ctl *Control) HandleReqWorkConn(inMsg *msg.ReqWorkConn) {
 	xl := ctl.xl
+	// frps 在 server/control.go:GetWorkConn() 中需要工作连接时，会通过控制连接发送 ReqWorkConn。
+	// frpc 收到后调用 connectServer() 新建一条连接，并发送 msg.NewWorkConn 绑定到当前 runID。
 	workConn, err := ctl.connectServer()
 	if err != nil {
 		return
@@ -167,6 +175,8 @@ func (ctl *Control) HandleReqWorkConn(inMsg *msg.ReqWorkConn) {
 	}
 
 	// dispatch this work connection to related proxy
+	// StartWorkConn.ProxyName 决定这条工作连接交给哪个本地代理处理。
+	// 分发入口：client/proxy/proxy_manager.go:HandleWorkConn()。
 	ctl.pm.HandleWorkConn(startMsg.ProxyName, workConn, &startMsg)
 }
 
@@ -174,6 +184,7 @@ func (ctl *Control) HandleNewProxyResp(inMsg *msg.NewProxyResp) {
 	xl := ctl.xl
 	// Server will return NewProxyResp message to each NewProxy message.
 	// Start a new proxy handler if no error got
+	// 对应服务端返回位置：server/control.go:manager() 注册代理后写入 msg.NewProxyResp。
 	err := ctl.pm.StartProxy(inMsg.ProxyName, inMsg.RemoteAddr, inMsg.Error)
 	if err != nil {
 		xl.Warn("[%s] start error: %v", inMsg.ProxyName, err)
@@ -205,6 +216,8 @@ func (ctl *Control) ClosedDoneCh() <-chan struct{} {
 }
 
 // connectServer return a new connection to frps
+// 调用位置：client/control.go:HandleReqWorkConn() 创建工作连接。
+// 当 tcp_mux=true 时复用 login() 建立的 yamux session；否则重新拨号到 frps。
 func (ctl *Control) connectServer() (conn net.Conn, err error) {
 	xl := ctl.xl
 	if ctl.clientCfg.TCPMux {
@@ -273,6 +286,8 @@ func (ctl *Control) connectServer() (conn net.Conn, err error) {
 }
 
 // reader read all messages from frps and send to readCh
+// 数据来源：server/control.go:writer() 写出的控制消息。
+// 读取到的消息统一进入 readCh，由 client/control.go:msgHandler() 按类型处理。
 func (ctl *Control) reader() {
 	xl := ctl.xl
 	defer func() {
@@ -301,6 +316,8 @@ func (ctl *Control) reader() {
 }
 
 // writer writes messages got from sendCh to frps
+// sendCh 的写入者包括 client/proxy/proxy_manager.go:HandleEvent() 和 msgHandler() 心跳逻辑。
+// 服务端读取位置：server/control.go:reader()。
 func (ctl *Control) writer() {
 	xl := ctl.xl
 	defer ctl.writerShutdown.Done()
@@ -325,6 +342,10 @@ func (ctl *Control) writer() {
 }
 
 // msgHandler handles all channel events and do corresponding operations.
+// 这里是 frpc 控制消息分发中心：
+// - ReqWorkConn：服务端需要工作连接，调用 HandleReqWorkConn()
+// - NewProxyResp：服务端代理注册结果，调用 HandleNewProxyResp()
+// - Pong：服务端心跳响应，刷新 lastPong
 func (ctl *Control) msgHandler() {
 	xl := ctl.xl
 	defer func() {
@@ -395,6 +416,8 @@ func (ctl *Control) msgHandler() {
 }
 
 // If controler is notified by closedCh, reader and writer and handler will exit
+// closedCh 由 reader() 在控制连接断开时关闭；worker 随后关闭代理、visitor 和 yamux session。
+// client/service.go:keepControllerWorking() 会等待 ClosedDoneCh() 后发起重连。
 func (ctl *Control) worker() {
 	go ctl.msgHandler()
 	go ctl.reader()

@@ -49,6 +49,9 @@ func NewConfByType(proxyType string) ProxyConf {
 }
 
 type ProxyConf interface {
+	// ProxyConf 是客户端和服务端共享的代理配置抽象。
+	// 客户端：client/proxy/proxy.go:NewProxy() 根据该接口创建本地代理。
+	// 服务端：server/proxy/proxy.go:NewProxy() 根据该接口创建公网入口代理。
 	GetBaseInfo() *BaseProxyConf
 	UnmarshalFromMsg(*msg.NewProxy)
 	UnmarshalFromIni(string, string, *ini.Section) error
@@ -266,6 +269,8 @@ func DefaultProxyConf(proxyType string) ProxyConf {
 }
 
 // Proxy loaded from ini
+// 调用位置：pkg/config/client.go:LoadAllProxyConfsFromIni()。
+// 作用：把 frpc.ini 中每个代理段解析为具体 ProxyConf，并进行客户端侧校验。
 func NewProxyConfFromIni(prefix, name string, section *ini.Section) (ProxyConf, error) {
 	// section.Key: if key not exists, section will set it with default value.
 	proxyType := section.Key("type").String()
@@ -290,6 +295,8 @@ func NewProxyConfFromIni(prefix, name string, section *ini.Section) (ProxyConf, 
 }
 
 // Proxy loaded from msg
+// 调用位置：server/control.go:RegisterProxy()。
+// 作用：把 frpc 发送的 msg.NewProxy 还原为服务端可校验和可运行的 ProxyConf。
 func NewProxyConfFromMsg(pMsg *msg.NewProxy, serverCfg ServerCommonConf) (ProxyConf, error) {
 	if pMsg.ProxyType == "" {
 		pMsg.ProxyType = consts.TCPProxy

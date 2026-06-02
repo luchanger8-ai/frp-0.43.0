@@ -37,6 +37,8 @@ import (
 type GetWorkConnFn func() (net.Conn, error)
 
 type Proxy interface {
+	// 服务端侧 Proxy 负责“监听公网入口或注册 vhost 路由，并把用户连接转发给 frpc 工作连接”。
+	// 创建位置：server/control.go:RegisterProxy() 调用 NewProxy()。
 	Context() context.Context
 	Run() (remoteAddr string, err error)
 	GetName() string
@@ -93,6 +95,8 @@ func (pxy *BaseProxy) Close() {
 
 // GetWorkConnFromPool try to get a new work connections from pool
 // for quickly response, we immediately send the StartWorkConn message to frpc after take out one from pool
+// 调用位置：server/proxy/proxy.go:HandleUserTCPConnection() 以及 UDP/STCP/XTCP 等具体代理实现。
+// 工作连接来源：server/control.go:GetWorkConn()，最终由 client/control.go:HandleReqWorkConn() 创建。
 func (pxy *BaseProxy) GetWorkConnFromPool(src, dst net.Addr) (workConn net.Conn, err error) {
 	xl := xlog.FromContextSafe(pxy.ctx)
 	// try all connections from the pool
@@ -148,6 +152,8 @@ func (pxy *BaseProxy) GetWorkConnFromPool(src, dst net.Addr) (workConn net.Conn,
 // startListenHandler start a goroutine handler for each listener.
 // p: p will just be passed to handler(Proxy, frpNet.Conn).
 // handler: each proxy type can set different handler function to deal with connections accepted from listeners.
+// 调用位置：server/proxy/tcp.go、server/proxy/http.go、server/proxy/https.go 等 Run() 方法。
+// 作用：为每个监听器启动 Accept 循环，用户连接到达后交给具体 handler。
 func (pxy *BaseProxy) startListenHandler(p Proxy, handler func(Proxy, net.Conn, config.ServerCommonConf)) {
 	xl := xlog.FromContextSafe(pxy.ctx)
 	for _, listener := range pxy.listeners {
@@ -185,6 +191,9 @@ func (pxy *BaseProxy) startListenHandler(p Proxy, handler func(Proxy, net.Conn, 
 
 func NewProxy(ctx context.Context, userInfo plugin.UserInfo, rc *controller.ResourceController, poolCount int,
 	getWorkConnFn GetWorkConnFn, pxyConf config.ProxyConf, serverCfg config.ServerCommonConf) (pxy Proxy, err error) {
+	// 调用位置：server/control.go:RegisterProxy()。
+	// 根据 pkg/config/proxy.go 的 ProxyConf 类型创建服务端代理实现。
+	// 注意：client/proxy/proxy.go 也有 NewProxy()，但客户端侧负责连接本地服务，服务端侧负责暴露公网入口。
 
 	xl := xlog.FromContextSafe(ctx).Spawn().AppendPrefix(pxyConf.GetBaseInfo().ProxyName)
 	basePxy := BaseProxy{
@@ -249,6 +258,9 @@ func NewProxy(ctx context.Context, userInfo plugin.UserInfo, rc *controller.Reso
 
 // HandleUserTCPConnection is used for incoming user TCP connections.
 // It can be used for tcp, http, https type.
+// 调用位置：server/proxy/tcp.go、server/proxy/http.go、server/proxy/https.go 等监听到用户连接后调用。
+// 作用：从 Control 的工作连接池取一条 workConn，把用户连接 userConn 与 frpc 工作连接双向拷贝。
+// 客户端对应处理：client/proxy/proxy.go:HandleTCPWorkConnection()。
 func HandleUserTCPConnection(pxy Proxy, userConn net.Conn, serverCfg config.ServerCommonConf) {
 	xl := xlog.FromContextSafe(pxy.Context())
 	defer userConn.Close()

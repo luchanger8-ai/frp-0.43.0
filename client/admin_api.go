@@ -39,6 +39,8 @@ func (svr *Service) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET api/reload
+// 前端入口：web/frpc/src/components/Configure.vue。
+// 作用：重新解析 frpc 配置文件，并调用 client/service.go:ReloadConf() 热加载代理和 visitor。
 func (svr *Service) apiReload(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 
@@ -154,6 +156,8 @@ func NewProxyStatusResp(status *proxy.WorkingStatus, serverAddr string) ProxySta
 }
 
 // GET api/status
+// 前端入口：web/frpc/src/components/Overview.vue。
+// 作用：读取 client/proxy/proxy_manager.go:GetAllProxyStatus()，返回所有代理的运行状态。
 func (svr *Service) apiStatus(w http.ResponseWriter, r *http.Request) {
 	var (
 		buf []byte
@@ -204,6 +208,8 @@ func (svr *Service) apiStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET api/config
+// 前端入口：web/frpc/src/components/Configure.vue。
+// 作用：读取当前 frpc 配置文件，返回给页面展示；token 会被过滤，避免在页面泄露。
 func (svr *Service) apiGetConfig(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 
@@ -244,6 +250,8 @@ func (svr *Service) apiGetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // PUT api/config
+// 前端入口：web/frpc/src/components/Configure.vue。
+// 作用：保存页面提交的新配置内容，再配合 /api/reload 生效。
 func (svr *Service) apiPutConfig(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 

@@ -27,6 +27,8 @@ func ParseClientConfig(filePath string) (
 	visitorCfgs map[string]VisitorConf,
 	err error,
 ) {
+	// 调用入口：cmd/frpc/sub/root.go 读取 frpc.ini 时调用。
+	// 解析结果会传入 client/service.go:NewService()，作为客户端启动、代理注册和 visitor 管理的配置来源。
 	var content []byte
 	content, err = GetRenderedConfFromFile(filePath)
 	if err != nil {
@@ -36,6 +38,7 @@ func ParseClientConfig(filePath string) (
 	configBuffer.Write(content)
 
 	// Parse common section.
+	// common 段解析为 ClientCommonConf，字段定义见 pkg/config/client.go。
 	cfg, err = UnmarshalClientConfFromIni(content)
 	if err != nil {
 		return
@@ -47,6 +50,7 @@ func ParseClientConfig(filePath string) (
 	}
 
 	// Aggregate proxy configs from include files.
+	// includes 会把额外配置文件拼接进来，再统一解析代理和 visitor。
 	var buf []byte
 	buf, err = getIncludeContents(cfg.IncludeConfigFiles)
 	if err != nil {
@@ -57,6 +61,7 @@ func ParseClientConfig(filePath string) (
 	configBuffer.Write(buf)
 
 	// Parse all proxy and visitor configs.
+	// 代理配置类型定义见 pkg/config/proxy.go；visitor 配置类型定义见 pkg/config/visitor.go。
 	pxyCfgs, visitorCfgs, err = LoadAllProxyConfsFromIni(cfg.User, configBuffer.Bytes(), cfg.Start)
 	if err != nil {
 		return
@@ -66,6 +71,8 @@ func ParseClientConfig(filePath string) (
 
 // getIncludeContents renders all configs from paths.
 // files format can be a single file path or directory or regex path.
+// 调用位置：pkg/config/parse.go:ParseClientConfig()。
+// 作用：读取 includes 指定的额外配置文件，支持通配路径匹配。
 func getIncludeContents(paths []string) ([]byte, error) {
 	out := bytes.NewBuffer(nil)
 	for _, path := range paths {

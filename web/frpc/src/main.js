@@ -1,4 +1,7 @@
 import Vue from 'vue'
+// frpc Admin UI 入口文件。
+// 后端静态资源挂载位置：client/admin.go:RunAdminServer()。
+// 页面 API 来源：client/admin_api.go，例如 /api/status、/api/reload、/api/config。
 // import ElementUI from 'element-ui'
 import {
     Button,

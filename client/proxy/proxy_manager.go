@@ -41,6 +41,8 @@ func NewManager(ctx context.Context, msgSendCh chan (msg.Message), clientCfg con
 }
 
 func (pm *Manager) StartProxy(name string, remoteAddr string, serverRespErr string) error {
+	// 调用位置：client/control.go:HandleNewProxyResp()。
+	// 作用：根据 frps 返回的 NewProxyResp，把 Wrapper 状态从 wait start 推进到 running 或 start error。
 	pm.mu.RLock()
 	pxy, ok := pm.proxies[name]
 	pm.mu.RUnlock()
@@ -65,6 +67,8 @@ func (pm *Manager) Close() {
 }
 
 func (pm *Manager) HandleWorkConn(name string, workConn net.Conn, m *msg.StartWorkConn) {
+	// 调用位置：client/control.go:HandleReqWorkConn()。
+	// 作用：把服务端分配好的工作连接交给对应代理的 Wrapper，再由 Wrapper 调用具体 Proxy.InWorkConn()。
 	pm.mu.RLock()
 	pw, ok := pm.proxies[name]
 	pm.mu.RUnlock()
@@ -76,6 +80,8 @@ func (pm *Manager) HandleWorkConn(name string, workConn net.Conn, m *msg.StartWo
 }
 
 func (pm *Manager) HandleEvent(evType event.Type, payload interface{}) error {
+	// 调用位置：client/proxy/proxy_wrapper.go:checkWorker() 和 close()。
+	// 作用：把代理生命周期事件转换为控制连接消息，写入 client/control.go:writer() 消费的 sendCh。
 	var m msg.Message
 	switch e := payload.(type) {
 	case *event.StartProxyPayload:
@@ -103,6 +109,8 @@ func (pm *Manager) GetAllProxyStatus() []*WorkingStatus {
 }
 
 func (pm *Manager) Reload(pxyCfgs map[string]config.ProxyConf) {
+	// 调用位置：client/control.go:Run() 初次加载代理；client/control.go:ReloadConf() 热加载代理。
+	// 作用：对比新旧配置，删除变化或不存在的代理，新增未启动的代理 Wrapper。
 	xl := xlog.FromContextSafe(pm.ctx)
 	pm.mu.Lock()
 	defer pm.mu.Unlock()

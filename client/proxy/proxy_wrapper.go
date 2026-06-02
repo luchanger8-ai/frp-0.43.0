@@ -68,6 +68,8 @@ type Wrapper struct {
 }
 
 func NewWrapper(ctx context.Context, cfg config.ProxyConf, clientCfg config.ClientCommonConf, eventHandler event.Handler, serverUDPPort int) *Wrapper {
+	// 调用位置：client/proxy/proxy_manager.go:Reload() 新增代理时调用。
+	// Wrapper 是客户端代理的状态机，负责健康检查、向 frps 注册代理，以及把工作连接交给具体 Proxy。
 	baseInfo := cfg.GetBaseInfo()
 	xl := xlog.FromContextSafe(ctx).Spawn().AppendPrefix(baseInfo.ProxyName)
 	pw := &Wrapper{
@@ -97,6 +99,8 @@ func NewWrapper(ctx context.Context, cfg config.ProxyConf, clientCfg config.Clie
 }
 
 func (pw *Wrapper) SetRunningStatus(remoteAddr string, respErr string) error {
+	// 调用位置：client/proxy/proxy_manager.go:StartProxy()。
+	// 服务端返回 NewProxyResp 后，只有 wait start 状态的代理才允许进入 running 或 start error。
 	pw.mu.Lock()
 	defer pw.mu.Unlock()
 	if pw.Phase != ProxyPhaseWaitStart {
@@ -125,6 +129,8 @@ func (pw *Wrapper) SetRunningStatus(remoteAddr string, respErr string) error {
 }
 
 func (pw *Wrapper) Start() {
+	// 调用位置：client/proxy/proxy_manager.go:Reload()。
+	// 启动状态检查协程；如果配置了健康检查，还会启动 client/health/health.go:Monitor。
 	go pw.checkWorker()
 	if pw.monitor != nil {
 		go pw.monitor.Start()
@@ -145,6 +151,8 @@ func (pw *Wrapper) Stop() {
 }
 
 func (pw *Wrapper) close() {
+	// 发送 CloseProxy 给 frps。
+	// 消息流向：client/proxy/proxy_manager.go:HandleEvent() -> client/control.go:writer() -> server/control.go:reader()。
 	pw.handler(event.EvCloseProxy, &event.CloseProxyPayload{
 		CloseProxyMsg: &msg.CloseProxy{
 			ProxyName: pw.Name,
@@ -153,6 +161,10 @@ func (pw *Wrapper) close() {
 }
 
 func (pw *Wrapper) checkWorker() {
+	// 代理状态机：
+	// 1. 健康正常时，new/check failed/start error 会发送 NewProxy 请求注册到 frps。
+	// 2. 健康失败时，running/wait start 会发送 CloseProxy 并切到 check failed。
+	// NewProxy 的服务端处理位置：server/control.go:manager()。
 	xl := pw.xl
 	if pw.monitor != nil {
 		// let monitor do check request first
@@ -223,6 +235,8 @@ func (pw *Wrapper) statusFailedCallback() {
 }
 
 func (pw *Wrapper) InWorkConn(workConn net.Conn, m *msg.StartWorkConn) {
+	// 调用位置：client/proxy/proxy_manager.go:HandleWorkConn()。
+	// 作用：接收 frps 分配的工作连接，并转交给具体代理类型处理本地服务转发。
 	xl := pw.xl
 	pw.mu.RLock()
 	pxy := pw.pxy

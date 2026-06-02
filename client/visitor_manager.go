@@ -24,6 +24,9 @@ import (
 )
 
 type VisitorManager struct {
+	// VisitorManager 管理 frpc 侧 stcp/xtcp/sudp visitor。
+	// 创建位置：client/control.go:NewControl()。
+	// 配置来源：pkg/config/visitor.go，热加载入口为 client/control.go:ReloadConf()。
 	ctl *Control
 
 	cfgs     map[string]config.VisitorConf
@@ -49,6 +52,8 @@ func NewVisitorManager(ctx context.Context, ctl *Control) *VisitorManager {
 }
 
 func (vm *VisitorManager) Run() {
+	// 调用位置：client/control.go:Run()。
+	// 定时检查配置中存在但尚未运行的 visitor，并尝试启动。
 	xl := xlog.FromContextSafe(vm.ctx)
 
 	ticker := time.NewTicker(vm.checkInterval)
@@ -89,6 +94,8 @@ func (vm *VisitorManager) startVisitor(cfg config.VisitorConf) (err error) {
 }
 
 func (vm *VisitorManager) Reload(cfgs map[string]config.VisitorConf) {
+	// 调用位置：client/control.go:NewControl() 初次加载，以及 client/control.go:ReloadConf() 热加载。
+	// 作用：根据配置差异关闭旧 visitor、启动新增 visitor。
 	xl := xlog.FromContextSafe(vm.ctx)
 	vm.mu.Lock()
 	defer vm.mu.Unlock()

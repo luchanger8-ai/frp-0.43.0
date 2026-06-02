@@ -17,6 +17,8 @@ package msg
 import "net"
 
 const (
+	// 这些类型字节是 frpc 与 frps 控制/工作连接上的消息标识。
+	// 读写方法在 pkg/msg/ctl.go，客户端处理在 client/control.go，服务端处理在 server/control.go 和 server/service.go。
 	TypeLogin                 = 'o'
 	TypeLoginResp             = '1'
 	TypeNewProxy              = 'p'
@@ -61,6 +63,8 @@ var (
 )
 
 // When frpc start, client send this message to login to server.
+// 发送位置：client/service.go:login()。
+// 接收位置：server/service.go:handleConnection()，随后调用 server/service.go:RegisterControl()。
 type Login struct {
 	Version      string            `json:"version,omitempty"`
 	Hostname     string            `json:"hostname,omitempty"`
@@ -77,6 +81,8 @@ type Login struct {
 }
 
 type LoginResp struct {
+	// 发送位置：server/control.go:Start()。
+	// 接收位置：client/service.go:login()，用于保存 runID 和服务端 UDP 端口。
 	Version       string `json:"version,omitempty"`
 	RunID         string `json:"run_id,omitempty"`
 	ServerUDPPort int    `json:"server_udp_port,omitempty"`
@@ -84,6 +90,8 @@ type LoginResp struct {
 }
 
 // When frpc login success, send this message to frps for running a new proxy.
+// 发送位置：client/proxy/proxy_wrapper.go:checkWorker()。
+// 接收位置：server/control.go:manager()，随后调用 RegisterProxy()。
 type NewProxy struct {
 	ProxyName      string            `json:"proxy_name,omitempty"`
 	ProxyType      string            `json:"proxy_type,omitempty"`
@@ -124,15 +132,21 @@ type CloseProxy struct {
 }
 
 type NewWorkConn struct {
+	// 发送位置：client/control.go:HandleReqWorkConn()。
+	// 接收位置：server/service.go:handleConnection()，随后调用 RegisterWorkConn()。
 	RunID        string `json:"run_id,omitempty"`
 	PrivilegeKey string `json:"privilege_key,omitempty"`
 	Timestamp    int64  `json:"timestamp,omitempty"`
 }
 
 type ReqWorkConn struct {
+	// 发送位置：server/control.go:Start() 和 server/control.go:GetWorkConn()。
+	// 接收位置：client/control.go:msgHandler()，随后调用 HandleReqWorkConn() 创建工作连接。
 }
 
 type StartWorkConn struct {
+	// 发送位置：server/proxy/proxy.go:BaseProxy.GetWorkConnFromPool()。
+	// 接收位置：client/control.go:HandleReqWorkConn()，用于把工作连接分发到具体代理。
 	ProxyName string `json:"proxy_name,omitempty"`
 	SrcAddr   string `json:"src_addr,omitempty"`
 	DstAddr   string `json:"dst_addr,omitempty"`

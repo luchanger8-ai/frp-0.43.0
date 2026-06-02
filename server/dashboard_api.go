@@ -57,6 +57,8 @@ func (svr *Service) Healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 // api/serverinfo
+// 前端入口：web/frps/src/components/Overview.vue。
+// 作用：返回 frps 版本、监听端口、当前连接数、客户端数量和代理类型统计。
 func (svr *Service) APIServerInfo(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 	defer func() {
@@ -170,6 +172,8 @@ type GetProxyInfoResp struct {
 }
 
 // api/proxy/:type
+// 前端入口：web/frps/src/components/Proxies*.vue。
+// 作用：按代理类型返回代理列表、配置摘要和内存统计信息。
 func (svr *Service) APIProxyByType(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 	params := mux.Vars(r)
@@ -235,6 +239,8 @@ type GetProxyStatsResp struct {
 }
 
 // api/proxy/:type/:name
+// 前端入口：web/frps/src/components/Proxies*.vue 的详情查询。
+// 作用：按代理类型和名称返回单个代理的配置、在线状态和流量统计。
 func (svr *Service) APIProxyByTypeAndName(w http.ResponseWriter, r *http.Request) {
 	res := GeneralResponse{Code: 200}
 	params := mux.Vars(r)
@@ -305,6 +311,8 @@ type GetProxyTrafficResp struct {
 }
 
 func (svr *Service) APIProxyTraffic(w http.ResponseWriter, r *http.Request) {
+	// 前端入口：web/frps/src/components/Traffic.vue。
+	// 作用：返回指定代理最近若干天的入站/出站流量数组。
 	res := GeneralResponse{Code: 200}
 	params := mux.Vars(r)
 	name := params["name"]

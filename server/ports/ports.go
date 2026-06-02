@@ -30,6 +30,9 @@ type PortCtx struct {
 }
 
 type Manager struct {
+	// Manager 负责 frps 侧 TCP/UDP 代理端口的申请、释放和保留。
+	// 创建位置：server/service.go:NewService()，分别创建 TCPPortManager 和 UDPPortManager。
+	// 使用位置：server/proxy/tcp.go、server/proxy/udp.go 以及 server/group/tcp.go。
 	reservedPorts map[string]*PortCtx
 	usedPorts     map[int]*PortCtx
 	freePorts     map[int]struct{}
@@ -40,6 +43,8 @@ type Manager struct {
 }
 
 func NewManager(netType string, bindAddr string, allowPorts map[int]struct{}) *Manager {
+	// allowPorts 为空时允许 1-65535；非空时只允许配置中的端口。
+	// cleanReservedPortsWorker() 会定期清理长时间未使用的保留端口。
 	pm := &Manager{
 		reservedPorts: make(map[string]*PortCtx),
 		usedPorts:     make(map[int]*PortCtx),
@@ -61,6 +66,8 @@ func NewManager(netType string, bindAddr string, allowPorts map[int]struct{}) *M
 }
 
 func (pm *Manager) Acquire(name string, port int) (realPort int, err error) {
+	// 调用位置：服务端具体代理 Run() 方法申请公网端口。
+	// port=0 表示随机端口；指定端口时会检查 allow_ports、是否已占用以及系统是否可监听。
 	portCtx := &PortCtx{
 		ProxyName:  name,
 		Closed:     false,
@@ -155,6 +162,8 @@ func (pm *Manager) isPortAvailable(port int) bool {
 }
 
 func (pm *Manager) Release(port int) {
+	// 调用位置：服务端代理关闭时释放端口，例如 server/proxy/tcp.go 的 Close 流程。
+	// 释放后端口回到 freePorts，同时记录 reservedPorts，便于同名代理短时间内复用随机端口。
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	if ctx, ok := pm.usedPorts[port]; ok {

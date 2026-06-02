@@ -11,6 +11,9 @@ import ProxiesSudp from '../components/ProxiesSudp.vue'
 Vue.use(Router)
 
 export default new Router({
+    // frps Dashboard 路由：
+    // / 展示服务端概览，对应 server/dashboard_api.go:APIServerInfo()
+    // /proxies/* 展示不同类型代理列表，对应 server/dashboard_api.go:APIProxyByType()
     routes: [{
         path: '/',
         name: 'Overview',

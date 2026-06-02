@@ -33,6 +33,9 @@ var (
 )
 
 func (svr *Service) RunDashboardServer(address string) (err error) {
+	// 调用位置：server/service.go:NewService()，当 dashboard_port 不为 0 时启动。
+	// 作用：提供 frps Dashboard 页面、统计 API 和可选 Prometheus metrics。
+	// 前端源码在 web/frps。
 	// url router
 	router := mux.NewRouter()
 	router.HandleFunc("/healthz", svr.Healthz)
@@ -57,6 +60,7 @@ func (svr *Service) RunDashboardServer(address string) (err error) {
 	}
 
 	// api, see dashboard_api.go
+	// web/frps/src/components/* 会请求这些接口展示服务端概览、代理列表和流量统计。
 	subRouter.HandleFunc("/api/serverinfo", svr.APIServerInfo).Methods("GET")
 	subRouter.HandleFunc("/api/proxy/{type}", svr.APIProxyByType).Methods("GET")
 	subRouter.HandleFunc("/api/proxy/{type}/{name}", svr.APIProxyByTypeAndName).Methods("GET")

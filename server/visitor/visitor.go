@@ -27,6 +27,9 @@ import (
 )
 
 // Manager for visitor listeners.
+// 服务端 visitor 管理器用于 stcp/sudp 等私密访问模式。
+// 创建位置：server/service.go:NewService() 的 ResourceController。
+// 新 visitor 连接入口：server/service.go:RegisterVisitorConn()。
 type Manager struct {
 	visitorListeners map[string]*frpNet.CustomListener
 	skMap            map[string]string
@@ -42,6 +45,8 @@ func NewManager() *Manager {
 }
 
 func (vm *Manager) Listen(name string, sk string) (l *frpNet.CustomListener, err error) {
+	// 调用位置：server/proxy/stcp.go、server/proxy/sudp.go 等服务端代理启动时。
+	// 作用：为指定代理创建一个自定义 listener，等待 visitor 连接注入。
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
 
@@ -58,6 +63,8 @@ func (vm *Manager) Listen(name string, sk string) (l *frpNet.CustomListener, err
 
 func (vm *Manager) NewConn(name string, conn net.Conn, timestamp int64, signKey string,
 	useEncryption bool, useCompression bool) (err error) {
+	// 调用位置：server/service.go:RegisterVisitorConn()。
+	// 作用：校验 visitor 签名后，把连接放入对应 CustomListener，让私密代理继续处理。
 
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()

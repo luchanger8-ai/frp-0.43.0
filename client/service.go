@@ -49,7 +49,9 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-// Service is a client service.
+// Service 是 frpc 客户端服务的顶层对象。
+// 调用入口：cmd/frpc/sub/root.go 会解析配置后创建 client.Service，并调用 Run() 启动客户端。
+// 主要职责：维护客户端全局配置、登录 frps、创建 Control 控制连接、管理重连和本地 Admin 服务。
 type Service struct {
 	// uniq id got from frps, attach it in loginMsg
 	runID string
@@ -106,6 +108,8 @@ func (svr *Service) GetController() *Control {
 func (svr *Service) Run() error {
 	xl := xlog.FromContextSafe(svr.ctx)
 
+	// 如果配置了 dns_server，这里替换 Go 默认 DNS 解析器。
+	// 后续 client/service.go:login()、client/control.go:connectServer() 发起连接时会使用该解析器。
 	// set custom DNSServer
 	if svr.cfg.DNSServer != "" {
 		dnsAddr := svr.cfg.DNSServer
@@ -121,6 +125,8 @@ func (svr *Service) Run() error {
 		}
 	}
 
+	// 登录 frps，成功后创建 client/control.go:NewControl()。
+	// Control 会继续负责代理注册、心跳、工作连接创建和访问者 visitor 管理。
 	// login to frps
 	for {
 		conn, session, err := svr.login()
@@ -144,6 +150,7 @@ func (svr *Service) Run() error {
 		}
 	}
 
+	// 控制连接断开后，由 keepControllerWorking() 负责自动重连 frps。
 	go svr.keepControllerWorking()
 
 	if svr.cfg.AdminPort != 0 {
@@ -174,6 +181,7 @@ func (svr *Service) keepControllerWorking() {
 	reconnectCounts := 1
 
 	for {
+		// 等待 client/control.go:worker() 完成资源释放后再进行重连，避免新旧控制连接交叉使用。
 		<-svr.ctl.ClosedDoneCh()
 		if atomic.LoadUint32(&svr.exit) != 0 {
 			return
@@ -213,6 +221,7 @@ func (svr *Service) keepControllerWorking() {
 			// reconnect success, init delayTime
 			delayTime = time.Second
 
+			// 重连成功后重新创建 Control，并重新加载代理配置和 visitor 配置。
 			ctl := NewControl(svr.ctx, svr.runID, conn, session, svr.cfg, svr.pxyCfgs, svr.visitorCfgs, svr.serverUDPPort, svr.authSetter)
 			ctl.Run()
 			svr.ctlMu.Lock()
@@ -226,7 +235,9 @@ func (svr *Service) keepControllerWorking() {
 	}
 }
 
-// login creates a connection to frps and registers it self as a client
+// login 创建到 frps 的控制连接，并发送 msg.Login 完成客户端登录。
+// 调用位置：client/service.go:Run() 首次登录；client/service.go:keepControllerWorking() 重连时再次调用。
+// 服务端接收位置：server/service.go:handleConnection() 读取 msg.Login 后调用 RegisterControl()。
 // conn: control connection
 // session: if it's not nil, using tcp mux
 func (svr *Service) login() (conn net.Conn, session *fmux.Session, err error) {

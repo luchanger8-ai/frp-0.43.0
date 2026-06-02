@@ -31,6 +31,9 @@ var (
 )
 
 type Monitor struct {
+	// Monitor 是客户端代理健康检查器。
+	// 创建位置：client/proxy/proxy_wrapper.go:NewWrapper()，当代理配置 health_check_type 不为空时启用。
+	// 状态变化会回调 Wrapper，使代理自动注册或关闭。
 	checkType      string
 	interval       time.Duration
 	timeout        time.Duration
@@ -90,6 +93,8 @@ func (monitor *Monitor) Stop() {
 }
 
 func (monitor *Monitor) checkWorker() {
+	// 周期性执行 tcp/http 健康检查。
+	// 成功时调用 statusNormalFn；连续失败达到阈值后调用 statusFailedFn。
 	xl := xlog.FromContextSafe(monitor.ctx)
 	for {
 		doCtx, cancel := context.WithDeadline(monitor.ctx, time.Now().Add(monitor.timeout))

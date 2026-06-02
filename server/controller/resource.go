@@ -25,6 +25,9 @@ import (
 )
 
 // All resource managers and controllers
+// ResourceController 汇总 frps 运行期共享资源。
+// 创建位置：server/service.go:NewService()。
+// 使用位置：server/proxy/* 的各类代理 Run() 方法，用于申请端口、注册 vhost、管理 visitor 和插件回调。
 type ResourceController struct {
 	// Manage all visitor listeners
 	VisitorManager *visitor.Manager

@@ -42,6 +42,8 @@ import (
 )
 
 type ControlManager struct {
+	// ControlManager 以 runID 为 key 管理所有已登录客户端的控制连接。
+	// 添加位置：server/service.go:RegisterControl()；查找位置：server/service.go:RegisterWorkConn()。
 	// controls indexed by run id
 	ctlsByRunID map[string]*Control
 
@@ -83,6 +85,9 @@ func (cm *ControlManager) GetByID(runID string) (ctl *Control, ok bool) {
 }
 
 type Control struct {
+	// Control 表示 frps 侧某一个 frpc 客户端的控制会话。
+	// 创建位置：server/service.go:RegisterControl() 调用 NewControl()。
+	// 主要职责：接收 NewProxy/CloseProxy/Ping，维护工作连接池，管理该客户端注册的所有代理。
 	// all resource managers and controllers
 	rc *controller.ResourceController
 
@@ -186,6 +191,8 @@ func NewControl(
 }
 
 // Start send a login success message to client and start working.
+// 调用位置：server/service.go:RegisterControl()。
+// 启动后会向 frpc 发送 LoginResp，并根据 poolCount 预先请求工作连接 ReqWorkConn。
 func (ctl *Control) Start() {
 	loginRespMsg := &msg.LoginResp{
 		Version:       version.Full(),
@@ -206,6 +213,8 @@ func (ctl *Control) Start() {
 }
 
 func (ctl *Control) RegisterWorkConn(conn net.Conn) error {
+	// 调用位置：server/service.go:RegisterWorkConn()。
+	// 作用：把 frpc 新建的工作连接放入 workConnCh，供代理处理用户连接时取用。
 	xl := ctl.xl
 	defer func() {
 		if err := recover(); err != nil {
@@ -228,6 +237,8 @@ func (ctl *Control) RegisterWorkConn(conn net.Conn) error {
 // If no workConn available in the pool, send message to frpc to get one or more
 // and wait until it is available.
 // return an error if wait timeout
+// 调用位置：server/proxy/proxy.go:BaseProxy.GetWorkConnFromPool()。
+// 作用：公网用户连接到达时，为该用户连接分配一条到 frpc 的工作连接。
 func (ctl *Control) GetWorkConn() (workConn net.Conn, err error) {
 	xl := ctl.xl
 	defer func() {
@@ -403,6 +414,9 @@ func (ctl *Control) WaitClosed() {
 }
 
 func (ctl *Control) manager() {
+	// 控制连接消息处理中心，读取 server/control.go:reader() 放入 readCh 的消息。
+	// 消息来源：client/control.go:writer()。
+	// 主要处理 NewProxy、CloseProxy、Ping 三类控制消息。
 	xl := ctl.xl
 	defer func() {
 		if err := recover(); err != nil {
@@ -499,6 +513,9 @@ func (ctl *Control) manager() {
 }
 
 func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err error) {
+	// 调用位置：server/control.go:manager() 收到 msg.NewProxy。
+	// 作用：把客户端发来的代理注册消息转换为服务端代理对象，并启动对应监听或 vhost 路由。
+	// 代理创建位置：server/proxy/proxy.go:NewProxy()。
 	var pxyConf config.ProxyConf
 	// Load configures from NewProxy message and check.
 	pxyConf, err = config.NewProxyConfFromMsg(pxyMsg, ctl.serverCfg)
@@ -562,6 +579,9 @@ func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err 
 }
 
 func (ctl *Control) CloseProxy(closeMsg *msg.CloseProxy) (err error) {
+	// 调用位置：server/control.go:manager() 收到 msg.CloseProxy。
+	// 对应客户端发送位置：client/proxy/proxy_wrapper.go:close()。
+	// 作用：关闭服务端代理监听、释放端口和指标资源。
 	ctl.mu.Lock()
 	pxy, ok := ctl.proxies[closeMsg.ProxyName]
 	if !ok {

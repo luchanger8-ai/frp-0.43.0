@@ -32,6 +32,8 @@ var (
 )
 
 func (svr *Service) RunAdminServer(address string) (err error) {
+	// 调用位置：client/service.go:Run()，当 admin_port 不为 0 时启动。
+	// 作用：提供 frpc 本地管理界面和 API，前端源码在 web/frpc。
 	// url router
 	router := mux.NewRouter()
 
@@ -51,6 +53,7 @@ func (svr *Service) RunAdminServer(address string) (err error) {
 	subRouter.Use(frpNet.NewHTTPAuthMiddleware(user, passwd).Middleware)
 
 	// api, see admin_api.go
+	// web/frpc/src/components/* 会通过这些接口查询状态、热加载配置和编辑配置。
 	subRouter.HandleFunc("/api/reload", svr.apiReload).Methods("GET")
 	subRouter.HandleFunc("/api/status", svr.apiStatus).Methods("GET")
 	subRouter.HandleFunc("/api/config", svr.apiGetConfig).Methods("GET")

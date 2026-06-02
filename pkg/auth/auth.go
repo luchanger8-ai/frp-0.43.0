@@ -72,12 +72,16 @@ func GetDefaultServerConf() ServerConfig {
 }
 
 type Setter interface {
+	// Setter 由 frpc 使用，用于给 Login/Ping/NewWorkConn 写入认证字段。
+	// 创建位置：client/service.go:NewService() 调用 NewAuthSetter()。
 	SetLogin(*msg.Login) error
 	SetPing(*msg.Ping) error
 	SetNewWorkConn(*msg.NewWorkConn) error
 }
 
 func NewAuthSetter(cfg ClientConfig) (authProvider Setter) {
+	// 根据 authentication_method 选择客户端认证实现。
+	// token 实现见 pkg/auth/token.go；OIDC 实现见 pkg/auth/oidc.go。
 	switch cfg.AuthenticationMethod {
 	case consts.TokenAuthMethod:
 		authProvider = NewTokenAuth(cfg.BaseConfig, cfg.TokenConfig)
@@ -91,12 +95,16 @@ func NewAuthSetter(cfg ClientConfig) (authProvider Setter) {
 }
 
 type Verifier interface {
+	// Verifier 由 frps 使用，用于校验 frpc 发来的 Login/Ping/NewWorkConn。
+	// 创建位置：server/service.go:NewService() 调用 NewAuthVerifier()。
 	VerifyLogin(*msg.Login) error
 	VerifyPing(*msg.Ping) error
 	VerifyNewWorkConn(*msg.NewWorkConn) error
 }
 
 func NewAuthVerifier(cfg ServerConfig) (authVerifier Verifier) {
+	// 根据 authentication_method 选择服务端认证校验器。
+	// 调用位置：server/service.go:NewService()。
 	switch cfg.AuthenticationMethod {
 	case consts.TokenAuthMethod:
 		authVerifier = NewTokenAuth(cfg.BaseConfig, cfg.TokenConfig)

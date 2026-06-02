@@ -58,6 +58,9 @@ const (
 )
 
 // Server service
+// frps 服务端顶层对象。
+// 调用入口：cmd/frps/root.go 解析配置后创建 server.Service，并调用 Run() 开始监听客户端连接。
+// 主要职责：创建监听器、资源控制器、插件管理器、Dashboard、vhost 路由和 ControlManager。
 type Service struct {
 	// Dispatch connections to different handlers listen on same port
 	muxer *mux.Mux
@@ -98,6 +101,7 @@ type Service struct {
 }
 
 func NewService(cfg config.ServerCommonConf) (svr *Service, err error) {
+	// 初始化服务端 TLS 配置。后续 server/service.go:HandleListener() 会根据连接头判断是否启用 TLS。
 	tlsConfig, err := transport.NewServerTLSConfig(
 		cfg.TLSCertFile,
 		cfg.TLSKeyFile,
@@ -122,6 +126,7 @@ func NewService(cfg config.ServerCommonConf) (svr *Service, err error) {
 	}
 
 	// Create tcpmux httpconnect multiplexer.
+	// TCPMuxHTTPConnectMuxer 会被 server/proxy/tcpmux.go 和 server/group/tcpmux.go 用于 HTTP CONNECT 复用。
 	if cfg.TCPMuxHTTPConnectPort > 0 {
 		var l net.Listener
 		address := net.JoinHostPort(cfg.ProxyBindAddr, strconv.Itoa(cfg.TCPMuxHTTPConnectPort))
@@ -178,6 +183,7 @@ func NewService(cfg config.ServerCommonConf) (svr *Service, err error) {
 	}
 
 	// Listen for accepting connections from client.
+	// frpc 的 client/service.go:login() 和 client/control.go:connectServer() 会连接到该地址。
 	address := net.JoinHostPort(cfg.BindAddr, strconv.Itoa(cfg.BindPort))
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
@@ -303,6 +309,11 @@ func NewService(cfg config.ServerCommonConf) (svr *Service, err error) {
 }
 
 func (svr *Service) Run() {
+	// 按协议类型启动监听循环：
+	// - TCP 默认入口：svr.listener
+	// - KCP 入口：svr.kcpListener
+	// - WebSocket 入口：svr.websocketListener
+	// - frp TLS 入口：svr.tlsListener
 	if svr.rc.NatHoleController != nil {
 		go svr.rc.NatHoleController.Run()
 	}
@@ -332,6 +343,8 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn) {
 	}
 	conn.SetReadDeadline(time.Time{})
 
+	// 每条新连接先读第一条 frp 消息，再按消息类型分流：
+	// Login：控制连接；NewWorkConn：工作连接；NewVisitorConn：私密访问 visitor 连接。
 	switch m := rawMsg.(type) {
 	case *msg.Login:
 		// server plugin hook
@@ -380,6 +393,8 @@ func (svr *Service) handleConnection(ctx context.Context, conn net.Conn) {
 }
 
 func (svr *Service) HandleListener(l net.Listener) {
+	// 调用位置：server/service.go:Run()。
+	// 作用：接受 frpc 新连接，处理 TLS/WebSocket/TCPMux，然后交给 handleConnection() 识别消息类型。
 	// Listen for incoming connections from client.
 	for {
 		c, err := l.Accept()
@@ -434,6 +449,8 @@ func (svr *Service) HandleListener(l net.Listener) {
 }
 
 func (svr *Service) RegisterControl(ctlConn net.Conn, loginMsg *msg.Login) (err error) {
+	// 调用位置：server/service.go:handleConnection() 收到 msg.Login。
+	// 作用：校验版本和认证，创建 server/control.go:NewControl()，并加入 ControlManager。
 	// If client's RunID is empty, it's a new client, we just create a new controller.
 	// Otherwise, we check if there is one controller has the same run id. If so, we release previous controller and start new one.
 	if loginMsg.RunID == "" {
@@ -481,6 +498,8 @@ func (svr *Service) RegisterControl(ctlConn net.Conn, loginMsg *msg.Login) (err 
 
 // RegisterWorkConn register a new work connection to control and proxies need it.
 func (svr *Service) RegisterWorkConn(workConn net.Conn, newMsg *msg.NewWorkConn) error {
+	// 调用位置：server/service.go:handleConnection() 收到 msg.NewWorkConn。
+	// 作用：根据 runID 找到对应 server/control.go:Control，把工作连接放入该客户端的连接池。
 	xl := frpNet.NewLogFromConn(workConn)
 	ctl, exist := svr.ctlManager.GetByID(newMsg.RunID)
 	if !exist {
@@ -513,6 +532,8 @@ func (svr *Service) RegisterWorkConn(workConn net.Conn, newMsg *msg.NewWorkConn)
 }
 
 func (svr *Service) RegisterVisitorConn(visitorConn net.Conn, newMsg *msg.NewVisitorConn) error {
+	// 调用位置：server/service.go:handleConnection() 收到 msg.NewVisitorConn。
+	// 作用：把 visitor 连接交给 server/visitor/visitor.go 中的 VisitorManager。
 	return svr.rc.VisitorManager.NewConn(newMsg.ProxyName, visitorConn, newMsg.Timestamp, newMsg.SignKey,
 		newMsg.UseEncryption, newMsg.UseCompression)
 }
